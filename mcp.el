@@ -1012,7 +1012,7 @@ the response to extract and return text content."
            :description description
            :args
            (mcp--parse-tool-args properties (or required '()))
-           (when confirm :confirm t))))))))
+           (when confirm :confirm t)))))))
 
 (defun mcp--set-log-level (connection log-level syncp)
   "Helper function to set the log level for the MCP server.
