@@ -85,6 +85,11 @@ Available levels:
           (const :tag "alert" alert)
           (const :tag "emergency" emergency)))
 
+(defcustom mcp-tools-confirm nil
+  "When non‑nil, tools with destructiveHint in their ToolAnnotations request confirmation."
+  :type 'boolean
+  :group 'mcp)
+
 (defcustom mcp-log-size nil
   "Maximum size for logging jsonrpc event.  0 disables, nil means infinite."
   :group 'mcp
@@ -976,7 +981,8 @@ the response to extract and return text content."
               (tools (mcp--tools connection))
               (tool (cl-find tool-name tools :test #'equal :key (lambda (tool) (plist-get tool :name)))))
     (cl-destructuring-bind (&key description ((:inputSchema input-schema)) &allow-other-keys) tool
-      (let ((confirm (eq (plist-get (plist-get tool :annotations) :destructiveHint) t)))
+      (let ((confirm (and mcp-tools-confirm
+                          (eq (plist-get (plist-get tool :annotations) :destructiveHint) t))))
         (cl-destructuring-bind (&key properties required &allow-other-keys) input-schema
           (list
            :function (if asyncp
