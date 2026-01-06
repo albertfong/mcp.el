@@ -976,41 +976,43 @@ the response to extract and return text content."
               (tools (mcp--tools connection))
               (tool (cl-find tool-name tools :test #'equal :key (lambda (tool) (plist-get tool :name)))))
     (cl-destructuring-bind (&key description ((:inputSchema input-schema)) &allow-other-keys) tool
-      (cl-destructuring-bind (&key properties required &allow-other-keys) input-schema
-        (list
-         :function (if asyncp
-                       (lambda (callback &rest args)
+      (let ((confirm (eq (plist-get (plist-get tool :annotations) :destructiveHint) t)))
+        (cl-destructuring-bind (&key properties required &allow-other-keys) input-schema
+          (list
+           :function (if asyncp
+                         (lambda (callback &rest args)
+                           (when (< (length args) (length required))
+                             (error "Error: args not match: %s -> %s" required args))
+                           (if-let* ((connection (gethash name mcp-server-connections)))
+                               (mcp-async-call-tool connection
+                                                    tool-name
+                                                    (mcp--generate-tool-call-args args properties)
+                                                    (lambda (res)
+                                                      (funcall callback
+                                                               (mcp--parse-tool-call-result res)))
+                                                    (lambda (code message)
+                                                      (funcall callback
+                                                               (format "call %s tool error with %s: %s"
+                                                                       tool-name
+                                                                       code
+                                                                       message))))
+                             (error "Error: %s server not connect" name)))
+                       (lambda (&rest args)
                          (when (< (length args) (length required))
                            (error "Error: args not match: %s -> %s" required args))
                          (if-let* ((connection (gethash name mcp-server-connections)))
-                             (mcp-async-call-tool connection
-                                                  tool-name
-                                                  (mcp--generate-tool-call-args args properties)
-                                                  (lambda (res)
-                                                    (funcall callback
-                                                             (mcp--parse-tool-call-result res)))
-                                                  (lambda (code message)
-                                                    (funcall callback
-                                                             (format "call %s tool error with %s: %s"
-                                                                     tool-name
-                                                                     code
-                                                                     message))))
-                           (error "Error: %s server not connect" name)))
-                     (lambda (&rest args)
-                       (when (< (length args) (length required))
-                         (error "Error: args not match: %s -> %s" required args))
-                       (if-let* ((connection (gethash name mcp-server-connections)))
-                           (if-let* ((res (mcp-call-tool connection
-                                                         tool-name
-                                                         (mcp--generate-tool-call-args args properties))))
-                               (mcp--parse-tool-call-result res)
-                             (error "Error: call %s tool error" tool-name))
-                         (error "Error: %s server not connect" name))))
-         :name tool-name
-         :async asyncp
-         :description description
-         :args
-         (mcp--parse-tool-args properties (or required '())))))))
+                             (if-let* ((res (mcp-call-tool connection
+                                                           tool-name
+                                                           (mcp--generate-tool-call-args args properties))))
+                                 (mcp--parse-tool-call-result res)
+                               (error "Error: call %s tool error" tool-name))
+                           (error "Error: %s server not connect" name))))
+           :name tool-name
+           :async asyncp
+           :description description
+           :args
+           (mcp--parse-tool-args properties (or required '()))
+           (when confirm :confirm t))))))))
 
 (defun mcp--set-log-level (connection log-level syncp)
   "Helper function to set the log level for the MCP server.
